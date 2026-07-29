@@ -1,4 +1,4 @@
-/* Paycheck Splitter – main application logic */
+/* Nina's Paycheck Splitter – main application logic */
 
 let supabase = null;
 let currentUser = null;
@@ -9,7 +9,9 @@ let isSignup = false;
 
 // ---------- Init ----------
 document.addEventListener('DOMContentLoaded', async () => {
-  // Set default date to today
+  // Always bind auth UI first so the Log in / Sign up tabs always work
+  bindAuthEvents();
+
   const dateInput = document.getElementById('paycheck-date');
   if (dateInput) dateInput.valueAsDate = new Date();
 
@@ -20,7 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   try {
-    // Create client – works with both legacy anon JWTs and new sb_publishable_ keys
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         persistSession: true,
@@ -35,7 +36,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // Auth state listener
   supabase.auth.onAuthStateChange((event, session) => {
     console.log('Auth event:', event);
     if (session?.user) {
@@ -49,7 +49,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Check existing session
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error) console.error('getSession error:', error);
@@ -67,7 +66,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     showAuth();
   }
 
-  bindAuthEvents();
   bindAppEvents();
 });
 
@@ -110,7 +108,6 @@ function showAuthError(msg) {
   el.textContent = msg;
   el.classList.remove('hidden');
   msgEl.classList.add('hidden');
-  // Make it very obvious
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function showAuthMessage(msg) {
@@ -122,32 +119,43 @@ function showAuthMessage(msg) {
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function bindAuthEvents() {
+function setAuthMode(signup) {
+  isSignup = signup;
   const loginTab = document.getElementById('tab-login');
   const signupTab = document.getElementById('tab-signup');
   const submitBtn = document.getElementById('auth-submit');
 
-  loginTab.addEventListener('click', () => {
-    isSignup = false;
-    loginTab.classList.add('bg-white', 'shadow', 'text-brand-700');
-    loginTab.classList.remove('text-gray-600');
-    signupTab.classList.remove('bg-white', 'shadow', 'text-brand-700');
-    signupTab.classList.add('text-gray-600');
-    submitBtn.textContent = 'Log in';
-    document.getElementById('auth-error').classList.add('hidden');
-    document.getElementById('auth-message').classList.add('hidden');
-  });
-
-  signupTab.addEventListener('click', () => {
-    isSignup = true;
+  if (signup) {
     signupTab.classList.add('bg-white', 'shadow', 'text-brand-700');
     signupTab.classList.remove('text-gray-600');
     loginTab.classList.remove('bg-white', 'shadow', 'text-brand-700');
     loginTab.classList.add('text-gray-600');
     submitBtn.textContent = 'Sign up';
-    document.getElementById('auth-error').classList.add('hidden');
-    document.getElementById('auth-message').classList.add('hidden');
-  });
+  } else {
+    loginTab.classList.add('bg-white', 'shadow', 'text-brand-700');
+    loginTab.classList.remove('text-gray-600');
+    signupTab.classList.remove('bg-white', 'shadow', 'text-brand-700');
+    signupTab.classList.add('text-gray-600');
+    submitBtn.textContent = 'Log in';
+  }
+
+  document.getElementById('auth-error').classList.add('hidden');
+  document.getElementById('auth-message').classList.add('hidden');
+}
+
+function bindAuthEvents() {
+  const loginTab = document.getElementById('tab-login');
+  const signupTab = document.getElementById('tab-signup');
+  const submitBtn = document.getElementById('auth-submit');
+
+  // Use both click and touchend for better tablet support
+  function onLogin() { setAuthMode(false); }
+  function onSignup() { setAuthMode(true); }
+
+  loginTab.addEventListener('click', onLogin);
+  signupTab.addEventListener('click', onSignup);
+  loginTab.addEventListener('touchend', function(e) { e.preventDefault(); onLogin(); });
+  signupTab.addEventListener('touchend', function(e) { e.preventDefault(); onSignup(); });
 
   document.getElementById('auth-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -167,13 +175,12 @@ function bindAuthEvents() {
     submitBtn.disabled = true;
     submitBtn.textContent = isSignup ? 'Creating account…' : 'Logging in…';
 
-    // Clear previous messages
     document.getElementById('auth-error').classList.add('hidden');
     document.getElementById('auth-message').classList.add('hidden');
 
     try {
       if (!supabase) {
-        throw new Error('Supabase client not initialized. Check your keys.');
+        throw new Error('Supabase client not initialized. Check your keys in config.js');
       }
 
       if (isSignup) {
@@ -181,38 +188,28 @@ function bindAuthEvents() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            emailRedirectTo: window.location.origin
-          }
+          options: { emailRedirectTo: window.location.origin }
         });
 
         console.log('signUp result:', { data, error });
-
         if (error) throw error;
 
-        // Some projects have email confirmation disabled – user may already be logged in
         if (data?.session) {
           showAuthMessage('Account created! You are now logged in.');
-          // onAuthStateChange will handle showing the app
         } else {
           showAuthMessage('Account created! Check your email for a confirmation link, then come back and log in.');
         }
       } else {
         console.log('Attempting signIn…');
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
         console.log('signIn result:', { data, error });
-
         if (error) throw error;
-
-        // Success – onAuthStateChange will switch to the app
         showAuthMessage('Logged in successfully!');
       }
     } catch (err) {
       console.error('Auth error:', err);
       let message = err.message || 'Authentication failed';
 
-      // Friendlier messages for common cases
       if (message.includes('Invalid login credentials')) {
         message = 'Wrong email or password';
       } else if (message.includes('Email not confirmed')) {
@@ -228,13 +225,13 @@ function bindAuthEvents() {
     }
   });
 
-  document.getElementById('btn-logout').addEventListener('click', async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-    } else {
-      location.reload();
-    }
-  });
+  const logoutBtn = document.getElementById('btn-logout');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      if (supabase) await supabase.auth.signOut();
+      else location.reload();
+    });
+  }
 }
 
 // ---------- App navigation ----------
@@ -255,15 +252,27 @@ function bindAppEvents() {
     });
   });
 
-  document.getElementById('btn-calculate').addEventListener('click', calculateSplit);
-  document.getElementById('btn-save-split').addEventListener('click', saveSplit);
+  const calcBtn = document.getElementById('btn-calculate');
+  if (calcBtn) calcBtn.addEventListener('click', calculateSplit);
 
-  document.getElementById('btn-add-preset').addEventListener('click', () => openPresetModal());
-  document.getElementById('btn-cancel-preset').addEventListener('click', closePresetModal);
-  document.getElementById('preset-form').addEventListener('submit', savePreset);
-  document.getElementById('preset-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closePresetModal();
-  });
+  const saveBtn = document.getElementById('btn-save-split');
+  if (saveBtn) saveBtn.addEventListener('click', saveSplit);
+
+  const addPresetBtn = document.getElementById('btn-add-preset');
+  if (addPresetBtn) addPresetBtn.addEventListener('click', () => openPresetModal());
+
+  const cancelPresetBtn = document.getElementById('btn-cancel-preset');
+  if (cancelPresetBtn) cancelPresetBtn.addEventListener('click', closePresetModal);
+
+  const presetForm = document.getElementById('preset-form');
+  if (presetForm) presetForm.addEventListener('submit', savePreset);
+
+  const presetModal = document.getElementById('preset-modal');
+  if (presetModal) {
+    presetModal.addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closePresetModal();
+    });
+  }
 }
 
 // ---------- Toast ----------
