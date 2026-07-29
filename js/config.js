@@ -6,7 +6,7 @@
 // 3. Paste them below
 // 4. Run the SQL in supabase-schema.sql (SQL Editor in Supabase)
 
-const SUPABASE_URL = 'https://wzleaeflnbkjaidegeps.supabase.co';       // e.g. https://xxxx.supabase.co
+const SUPABASE_URL = 'https://wzleaeflnbkjaidegeps.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_eQ-p-RUrLDTgZiHa9b3NkQ_kL8myOmk';
 
 // Optional: set to true once keys are filled to skip the "not configured" warning
