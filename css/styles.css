@@ -1,0 +1,30 @@
+/* Small extras beyond Tailwind */
+
+/* Smooth tab transitions */
+.tab-content {
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Number input – hide spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Focus ring polish */
+input:focus, button:focus-visible {
+  outline: none;
+}
+
+/* Modal backdrop */
+#preset-modal {
+  backdrop-filter: blur(2px);
+}
