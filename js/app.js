@@ -3,25 +3,41 @@
 let supabase = null;
 let currentUser = null;
 let presets = [];
-let lastSplit = null; // { amount, date, notes, allocations, remaining }
+let lastSplit = null;
 let categoryChart = null;
+let isSignup = false;
 
 // ---------- Init ----------
 document.addEventListener('DOMContentLoaded', async () => {
   // Set default date to today
-  document.getElementById('paycheck-date').valueAsDate = new Date();
+  const dateInput = document.getElementById('paycheck-date');
+  if (dateInput) dateInput.valueAsDate = new Date();
 
   if (!SUPABASE_CONFIGURED) {
-    showAuthError('Supabase is not configured. Open js/config.js and add your Project URL + anon key. See README.');
-    // Still allow demo mode with localStorage fallback
+    showAuthError('Supabase is not configured. Open js/config.js and add your Project URL + publishable key.');
     initLocalMode();
     return;
   }
 
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  try {
+    // Create client – works with both legacy anon JWTs and new sb_publishable_ keys
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
+  } catch (err) {
+    console.error('Failed to create Supabase client:', err);
+    showAuthError('Could not connect to Supabase. Check your URL and key in config.js');
+    initLocalMode();
+    return;
+  }
 
   // Auth state listener
   supabase.auth.onAuthStateChange((event, session) => {
+    console.log('Auth event:', event);
     if (session?.user) {
       currentUser = session.user;
       showApp();
@@ -34,13 +50,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Check existing session
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) {
-    currentUser = session.user;
-    showApp();
-    loadPresets();
-    loadHistory();
-  } else {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) console.error('getSession error:', error);
+
+    if (session?.user) {
+      currentUser = session.user;
+      showApp();
+      loadPresets();
+      loadHistory();
+    } else {
+      showAuth();
+    }
+  } catch (err) {
+    console.error('Session check failed:', err);
     showAuth();
   }
 
@@ -48,16 +71,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindAppEvents();
 });
 
-// ---------- Local-only fallback (no Supabase) ----------
+// ---------- Local-only fallback ----------
 function initLocalMode() {
   currentUser = { id: 'local', email: 'local@demo' };
-  // Hide auth, show app immediately
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('user-email').textContent = 'Local mode (data stays in browser)';
   document.getElementById('user-email').classList.remove('hidden');
 
-  // Load from localStorage
   presets = JSON.parse(localStorage.getItem('ps_presets') || '[]');
   renderPresets();
   renderHistory(JSON.parse(localStorage.getItem('ps_history') || '[]'));
@@ -85,70 +106,139 @@ function showApp() {
 
 function showAuthError(msg) {
   const el = document.getElementById('auth-error');
+  const msgEl = document.getElementById('auth-message');
   el.textContent = msg;
   el.classList.remove('hidden');
-  document.getElementById('auth-message').classList.add('hidden');
+  msgEl.classList.add('hidden');
+  // Make it very obvious
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function showAuthMessage(msg) {
   const el = document.getElementById('auth-message');
+  const errEl = document.getElementById('auth-error');
   el.textContent = msg;
   el.classList.remove('hidden');
-  document.getElementById('auth-error').classList.add('hidden');
+  errEl.classList.add('hidden');
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function bindAuthEvents() {
-  let isSignup = false;
-  document.getElementById('tab-login').addEventListener('click', () => {
+  const loginTab = document.getElementById('tab-login');
+  const signupTab = document.getElementById('tab-signup');
+  const submitBtn = document.getElementById('auth-submit');
+
+  loginTab.addEventListener('click', () => {
     isSignup = false;
-    document.getElementById('tab-login').classList.add('bg-white', 'shadow', 'text-brand-700');
-    document.getElementById('tab-login').classList.remove('text-gray-600');
-    document.getElementById('tab-signup').classList.remove('bg-white', 'shadow', 'text-brand-700');
-    document.getElementById('tab-signup').classList.add('text-gray-600');
-    document.getElementById('auth-submit').textContent = 'Log in';
+    loginTab.classList.add('bg-white', 'shadow', 'text-brand-700');
+    loginTab.classList.remove('text-gray-600');
+    signupTab.classList.remove('bg-white', 'shadow', 'text-brand-700');
+    signupTab.classList.add('text-gray-600');
+    submitBtn.textContent = 'Log in';
+    document.getElementById('auth-error').classList.add('hidden');
+    document.getElementById('auth-message').classList.add('hidden');
   });
-  document.getElementById('tab-signup').addEventListener('click', () => {
+
+  signupTab.addEventListener('click', () => {
     isSignup = true;
-    document.getElementById('tab-signup').classList.add('bg-white', 'shadow', 'text-brand-700');
-    document.getElementById('tab-signup').classList.remove('text-gray-600');
-    document.getElementById('tab-login').classList.remove('bg-white', 'shadow', 'text-brand-700');
-    document.getElementById('tab-login').classList.add('text-gray-600');
-    document.getElementById('auth-submit').textContent = 'Sign up';
+    signupTab.classList.add('bg-white', 'shadow', 'text-brand-700');
+    signupTab.classList.remove('text-gray-600');
+    loginTab.classList.remove('bg-white', 'shadow', 'text-brand-700');
+    loginTab.classList.add('text-gray-600');
+    submitBtn.textContent = 'Sign up';
+    document.getElementById('auth-error').classList.add('hidden');
+    document.getElementById('auth-message').classList.add('hidden');
   });
 
   document.getElementById('auth-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+
     const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
-    const btn = document.getElementById('auth-submit');
-    btn.disabled = true;
-    btn.textContent = '…';
+
+    if (!email || !password) {
+      showAuthError('Please enter both email and password');
+      return;
+    }
+    if (password.length < 6) {
+      showAuthError('Password must be at least 6 characters');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = isSignup ? 'Creating account…' : 'Logging in…';
+
+    // Clear previous messages
+    document.getElementById('auth-error').classList.add('hidden');
+    document.getElementById('auth-message').classList.add('hidden');
 
     try {
+      if (!supabase) {
+        throw new Error('Supabase client not initialized. Check your keys.');
+      }
+
       if (isSignup) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        console.log('Attempting signUp…');
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin
+          }
+        });
+
+        console.log('signUp result:', { data, error });
+
         if (error) throw error;
-        showAuthMessage('Check your email for a confirmation link, then log in.');
+
+        // Some projects have email confirmation disabled – user may already be logged in
+        if (data?.session) {
+          showAuthMessage('Account created! You are now logged in.');
+          // onAuthStateChange will handle showing the app
+        } else {
+          showAuthMessage('Account created! Check your email for a confirmation link, then come back and log in.');
+        }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        console.log('Attempting signIn…');
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+        console.log('signIn result:', { data, error });
+
         if (error) throw error;
+
+        // Success – onAuthStateChange will switch to the app
+        showAuthMessage('Logged in successfully!');
       }
     } catch (err) {
-      showAuthError(err.message || 'Authentication failed');
+      console.error('Auth error:', err);
+      let message = err.message || 'Authentication failed';
+
+      // Friendlier messages for common cases
+      if (message.includes('Invalid login credentials')) {
+        message = 'Wrong email or password';
+      } else if (message.includes('Email not confirmed')) {
+        message = 'Please confirm your email first (check your inbox)';
+      } else if (message.includes('User already registered')) {
+        message = 'This email is already registered. Try logging in instead.';
+      }
+
+      showAuthError(message);
     } finally {
-      btn.disabled = false;
-      btn.textContent = isSignup ? 'Sign up' : 'Log in';
+      submitBtn.disabled = false;
+      submitBtn.textContent = isSignup ? 'Sign up' : 'Log in';
     }
   });
 
   document.getElementById('btn-logout').addEventListener('click', async () => {
-    if (supabase) await supabase.auth.signOut();
-    else location.reload(); // local mode
+    if (supabase) {
+      await supabase.auth.signOut();
+    } else {
+      location.reload();
+    }
   });
 }
 
 // ---------- App navigation ----------
 function bindAppEvents() {
-  // Tabs
   document.querySelectorAll('.nav-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.nav-tab').forEach(b => {
@@ -165,13 +255,9 @@ function bindAppEvents() {
     });
   });
 
-  // Calculate
   document.getElementById('btn-calculate').addEventListener('click', calculateSplit);
-
-  // Save split
   document.getElementById('btn-save-split').addEventListener('click', saveSplit);
 
-  // Presets
   document.getElementById('btn-add-preset').addEventListener('click', () => openPresetModal());
   document.getElementById('btn-cancel-preset').addEventListener('click', closePresetModal);
   document.getElementById('preset-form').addEventListener('submit', savePreset);
@@ -202,7 +288,7 @@ async function loadPresets() {
     .order('sort_order', { ascending: true });
   if (error) {
     console.error(error);
-    toast('Could not load presets');
+    toast('Could not load presets: ' + error.message);
     return;
   }
   presets = data || [];
@@ -267,7 +353,6 @@ async function movePreset(idx, dir) {
   const newIdx = idx + dir;
   if (newIdx < 0 || newIdx >= presets.length) return;
   [presets[idx], presets[newIdx]] = [presets[newIdx], presets[idx]];
-  // Update sort_order
   presets.forEach((p, i) => p.sort_order = i);
   renderPresets();
   await persistPresetOrder();
@@ -278,7 +363,6 @@ async function persistPresetOrder() {
     saveLocalPresets();
     return;
   }
-  // Update each
   for (const p of presets) {
     await supabase.from('presets').update({ sort_order: p.sort_order }).eq('id', p.id);
   }
@@ -377,16 +461,14 @@ function calculateSplit() {
   let remaining = amount;
   const allocations = [];
 
-  // Process in order
   for (const p of presets) {
     let allocated = 0;
     if (p.type === 'fixed') {
       allocated = Math.min(Number(p.value), remaining);
     } else {
-      // percent of *current remaining*
       allocated = remaining * (Number(p.value) / 100);
     }
-    allocated = Math.round(allocated * 100) / 100; // cents
+    allocated = Math.round(allocated * 100) / 100;
     if (allocated > 0) {
       allocations.push({
         label: p.label,
@@ -506,7 +588,7 @@ async function loadHistory() {
       .order('paycheck_date', { ascending: false });
     if (error) {
       console.error(error);
-      toast('Could not load history');
+      toast('Could not load history: ' + error.message);
       return;
     }
     history = data || [];
@@ -515,12 +597,10 @@ async function loadHistory() {
 }
 
 function renderHistory(history) {
-  // Stats
   const total = history.reduce((s, h) => s + Number(h.amount), 0);
   document.getElementById('stat-total').textContent = '$' + total.toFixed(2);
   document.getElementById('stat-count').textContent = history.length;
 
-  // Aggregate by category
   const catMap = {};
   history.forEach(h => {
     (h.allocations || []).forEach(a => {
@@ -533,7 +613,6 @@ function renderHistory(history) {
   const categories = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
   document.getElementById('stat-categories').textContent = categories.length;
 
-  // Category totals list
   const totalsEl = document.getElementById('category-totals');
   if (!categories.length) {
     totalsEl.innerHTML = '<p class="text-gray-400 text-center py-8">No history yet</p>';
@@ -546,7 +625,6 @@ function renderHistory(history) {
     `).join('');
   }
 
-  // Chart
   const chartEmpty = document.getElementById('chart-empty');
   const canvas = document.getElementById('category-chart');
   if (categoryChart) {
@@ -583,7 +661,6 @@ function renderHistory(history) {
     });
   }
 
-  // History list
   const listEl = document.getElementById('history-list');
   if (!history.length) {
     listEl.innerHTML = '<p class="text-gray-400 text-center py-8">No saved paychecks yet</p>';
