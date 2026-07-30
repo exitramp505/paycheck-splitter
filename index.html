@@ -27,6 +27,27 @@
       }
     }
   </script>
+  <script>
+    // Keep this tiny auth toggle inline so it still works if a CDN or app script
+    // fails to load on a mobile/tablet browser.
+    window.setAuthMode = function (signup) {
+      var loginTab = document.getElementById('tab-login');
+      var signupTab = document.getElementById('tab-signup');
+      var submitBtn = document.getElementById('auth-submit');
+      var password = document.getElementById('auth-password');
+      if (!loginTab || !signupTab || !submitBtn) return;
+
+      document.documentElement.dataset.authMode = signup ? 'signup' : 'login';
+      loginTab.className = 'flex-1 py-2.5 text-sm font-medium rounded-md ' +
+        (signup ? 'text-gray-600' : 'bg-white shadow text-brand-700');
+      signupTab.className = 'flex-1 py-2.5 text-sm font-medium rounded-md ' +
+        (signup ? 'bg-white shadow text-brand-700' : 'text-gray-600');
+      loginTab.setAttribute('aria-selected', signup ? 'false' : 'true');
+      signupTab.setAttribute('aria-selected', signup ? 'true' : 'false');
+      submitBtn.textContent = signup ? 'Sign up' : 'Log in';
+      if (password) password.autocomplete = signup ? 'new-password' : 'current-password';
+    };
+  </script>
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen">
   <!-- Auth Screen -->
@@ -45,11 +66,13 @@
       <!-- Auth mode tabs -->
       <div id="auth-tabs" class="flex mb-6 bg-gray-100 rounded-lg p-1">
         <button type="button" id="tab-login"
+          onclick="window.setAuthMode(false)"
           aria-selected="true"
           class="flex-1 py-2.5 text-sm font-medium rounded-md bg-white shadow text-brand-700">
           Log in
         </button>
         <button type="button" id="tab-signup"
+          onclick="window.setAuthMode(true)"
           aria-selected="false"
           class="flex-1 py-2.5 text-sm font-medium rounded-md text-gray-600">
           Sign up
@@ -250,7 +273,7 @@
 
   <div id="toast" class="fixed bottom-6 right-6 bg-gray-900 text-white px-5 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50"></div>
 
-  <script src="js/config.js?v=20260729"></script>
-  <script src="js/app.js?v=20260729"></script>
+  <script src="js/config.js?v=20260729-2"></script>
+  <script src="js/app.js?v=20260729-2"></script>
 </body>
 </html>

@@ -9,6 +9,7 @@ let isSignup = false;
 
 function setAuthMode(signup) {
   isSignup = !!signup;
+  document.documentElement.dataset.authMode = isSignup ? 'signup' : 'login';
   var loginTab = document.getElementById('tab-login');
   var signupTab = document.getElementById('tab-signup');
   var submitBtn = document.getElementById('auth-submit');
@@ -35,8 +36,10 @@ function setAuthMode(signup) {
   if (err) err.classList.add('hidden');
   if (msg) msg.classList.add('hidden');
 }
+window.setAuthMode = setAuthMode;
 
 async function handleAuthSubmit() {
+  isSignup = document.documentElement.dataset.authMode === 'signup';
   var email = (document.getElementById('auth-email').value || '').trim();
   var password = document.getElementById('auth-password').value || '';
   var submitBtn = document.getElementById('auth-submit');
