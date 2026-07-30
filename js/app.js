@@ -7,30 +7,36 @@ let lastSplit = null;
 let categoryChart = null;
 let isSignup = false;
 
-// MUST be on window so the HTML onclick handlers can call them
-window.setAuthMode = function (signup) {
+function setAuthMode(signup) {
   isSignup = !!signup;
   var loginTab = document.getElementById('tab-login');
   var signupTab = document.getElementById('tab-signup');
   var submitBtn = document.getElementById('auth-submit');
 
-  if (signup) {
+  if (isSignup) {
     signupTab.className = 'flex-1 py-2.5 text-sm font-medium rounded-md bg-white shadow text-brand-700';
     loginTab.className = 'flex-1 py-2.5 text-sm font-medium rounded-md text-gray-600';
+    signupTab.setAttribute('aria-selected', 'true');
+    loginTab.setAttribute('aria-selected', 'false');
     if (submitBtn) submitBtn.textContent = 'Sign up';
   } else {
     loginTab.className = 'flex-1 py-2.5 text-sm font-medium rounded-md bg-white shadow text-brand-700';
     signupTab.className = 'flex-1 py-2.5 text-sm font-medium rounded-md text-gray-600';
+    loginTab.setAttribute('aria-selected', 'true');
+    signupTab.setAttribute('aria-selected', 'false');
     if (submitBtn) submitBtn.textContent = 'Log in';
   }
+
+  var password = document.getElementById('auth-password');
+  if (password) password.autocomplete = isSignup ? 'new-password' : 'current-password';
 
   var err = document.getElementById('auth-error');
   var msg = document.getElementById('auth-message');
   if (err) err.classList.add('hidden');
   if (msg) msg.classList.add('hidden');
-};
+}
 
-window.handleAuthSubmit = async function () {
+async function handleAuthSubmit() {
   var email = (document.getElementById('auth-email').value || '').trim();
   var password = document.getElementById('auth-password').value || '';
   var submitBtn = document.getElementById('auth-submit');
@@ -80,9 +86,26 @@ window.handleAuthSubmit = async function () {
     submitBtn.disabled = false;
     submitBtn.textContent = isSignup ? 'Sign up' : 'Log in';
   }
-};
+}
+
+function bindAuthEvents() {
+  var loginTab = document.getElementById('tab-login');
+  var signupTab = document.getElementById('tab-signup');
+  var authForm = document.getElementById('auth-form');
+
+  if (loginTab) loginTab.addEventListener('click', function () { setAuthMode(false); });
+  if (signupTab) signupTab.addEventListener('click', function () { setAuthMode(true); });
+  if (authForm) {
+    authForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      handleAuthSubmit();
+    });
+  }
+}
 
 document.addEventListener('DOMContentLoaded', async function () {
+  bindAuthEvents();
+
   var dateInput = document.getElementById('paycheck-date');
   if (dateInput) dateInput.valueAsDate = new Date();
 
