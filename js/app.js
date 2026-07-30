@@ -258,7 +258,7 @@ function renderPresets() {
   presets.forEach(function (p, idx) {
     var row = document.createElement('div');
     row.className = 'flex items-center gap-3 p-3 bg-gray-50 rounded-lg border';
-    var valText = p.type === 'fixed' ? ('$' + Number(p.value).toFixed(2) + ' fixed') : (Number(p.value) + '% of remaining');
+    var valText = p.type === 'fixed' ? ('$' + Number(p.value).toFixed(2) + ' fixed') : (Number(p.value) + '% of paycheck');
     row.innerHTML = '<div class="flex-1"><div class="font-medium">' + escapeHtml(p.label) + '</div><div class="text-sm text-gray-500">' + valText + '</div></div>' +
       '<button data-a="edit" data-i="' + idx + '" class="text-sm text-brand-600 px-2">Edit</button>' +
       '<button data-a="del" data-i="' + idx + '" class="text-sm text-red-600 px-2">Delete</button>';
@@ -343,17 +343,43 @@ function calculateSplit() {
   if (!presets.length) { toast('Add presets first'); return; }
 
   var remaining = amount;
-  var allocations = [];
+  var allocationsByIndex = {};
+
+  // Calculate every percentage from the original paycheck before fixed presets.
   for (var i = 0; i < presets.length; i++) {
     var p = presets[i];
-    var allocated = p.type === 'fixed' ? Math.min(Number(p.value), remaining) : remaining * (Number(p.value) / 100);
+    if (p.type !== 'percent') continue;
+    var allocated = amount * (Number(p.value) / 100);
     allocated = Math.round(allocated * 100) / 100;
+    allocated = Math.min(allocated, remaining);
     if (allocated > 0) {
-      allocations.push({ label: p.label, type: p.type, value: p.value, amount: allocated });
+      allocationsByIndex[i] = { label: p.label, type: p.type, value: p.value, amount: allocated };
       remaining -= allocated;
     }
   }
+
+  // Apply fixed presets only after all percentage allocations are known.
+  for (var j = 0; j < presets.length; j++) {
+    var fixedPreset = presets[j];
+    if (fixedPreset.type !== 'fixed') continue;
+    var fixedAmount = Math.min(Number(fixedPreset.value), remaining);
+    fixedAmount = Math.round(fixedAmount * 100) / 100;
+    if (fixedAmount > 0) {
+      allocationsByIndex[j] = {
+        label: fixedPreset.label,
+        type: fixedPreset.type,
+        value: fixedPreset.value,
+        amount: fixedAmount
+      };
+      remaining -= fixedAmount;
+    }
+  }
+
   remaining = Math.round(remaining * 100) / 100;
+  var allocations = Object.keys(allocationsByIndex)
+    .map(Number)
+    .sort(function (a, b) { return a - b; })
+    .map(function (index) { return allocationsByIndex[index]; });
 
   lastSplit = {
     amount: amount,

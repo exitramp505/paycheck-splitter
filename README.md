@@ -1,6 +1,6 @@
 # Paycheck Splitter
 
-A simple web app that lets you enter a paycheck amount and split it according to ordered presets (mix of **fixed dollar amounts** and **percentages of remaining**). Every split can be saved so you can see totals per category over time.
+A simple web app that lets you enter a paycheck amount and split it with a mix of **fixed dollar amounts** and **percentages of the full paycheck**. Every split can be saved so you can see totals per category over time.
 
 - **Frontend**: plain HTML + Tailwind + vanilla JS (no build step)
 - **Backend / DB**: [Supabase](https://supabase.com) (Postgres + Auth)
@@ -11,7 +11,7 @@ A simple web app that lets you enter a paycheck amount and split it according to
 
 - **Split Paycheck** – enter amount → calculate → see breakdown → save
 - **Presets** – add / edit / reorder / delete. Labels free-form. Mix of fixed `$` and `%`
-- Calculation is **sequential**: fixed amounts take from the remaining balance first; percentages apply to whatever is left at that point
+- Percentages are calculated from the **full paycheck first**, then fixed amounts are deducted from what remains
 - **History & Reports** – totals by category, doughnut chart, list of past paychecks
 - Email + password auth via Supabase
 
@@ -81,12 +81,12 @@ Presets are processed **top → bottom** (you can reorder them with the arrows).
 ```
 remaining = paycheck_amount
 
-for each preset in order:
-  if fixed:
-    allocated = min(preset.value, remaining)
-  if percent:
-    allocated = remaining * (preset.value / 100)
+for each percentage preset:
+  allocated = paycheck_amount * (preset.value / 100)
+  remaining -= allocated
 
+for each fixed preset:
+  allocated = min(preset.value, remaining)
   remaining -= allocated
 ```
 
