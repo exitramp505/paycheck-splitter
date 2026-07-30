@@ -106,14 +106,6 @@ document.addEventListener('DOMContentLoaded', async function () {
   var dateInput = document.getElementById('paycheck-date');
   if (dateInput) dateInput.valueAsDate = new Date();
 
-  var logoutBtn = document.getElementById('btn-logout');
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', async function () {
-      if (supabaseClient) await supabaseClient.auth.signOut();
-      else location.reload();
-    });
-  }
-
   if (typeof SUPABASE_CONFIGURED === 'undefined' || !SUPABASE_CONFIGURED) {
     showAuthError('Supabase not configured.');
     initLocalMode();
