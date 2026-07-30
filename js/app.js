@@ -1,6 +1,6 @@
 /* Nina's Paycheck Splitter */
 
-let supabase = null;
+let supabaseClient = null;
 let currentUser = null;
 let presets = [];
 let lastSplit = null;
@@ -59,10 +59,10 @@ async function handleAuthSubmit() {
   document.getElementById('auth-message').classList.add('hidden');
 
   try {
-    if (!supabase) throw new Error('Supabase not connected. Check config.js');
+    if (!supabaseClient) throw new Error('Supabase not connected. Check config.js');
 
     if (isSignup) {
-      var result = await supabase.auth.signUp({
+      var result = await supabaseClient.auth.signUp({
         email: email,
         password: password,
         options: { emailRedirectTo: window.location.origin }
@@ -74,7 +74,7 @@ async function handleAuthSubmit() {
         showAuthMessage('Account created! Check your email for a confirmation link, then log in.');
       }
     } else {
-      var result2 = await supabase.auth.signInWithPassword({ email: email, password: password });
+      var result2 = await supabaseClient.auth.signInWithPassword({ email: email, password: password });
       if (result2.error) throw result2.error;
       showAuthMessage('Logged in successfully!');
     }
@@ -90,20 +90,14 @@ async function handleAuthSubmit() {
     submitBtn.textContent = isSignup ? 'Sign up' : 'Log in';
   }
 }
+window.handleAuthSubmit = handleAuthSubmit;
 
 function bindAuthEvents() {
   var loginTab = document.getElementById('tab-login');
   var signupTab = document.getElementById('tab-signup');
-  var authForm = document.getElementById('auth-form');
 
   if (loginTab) loginTab.addEventListener('click', function () { setAuthMode(false); });
   if (signupTab) signupTab.addEventListener('click', function () { setAuthMode(true); });
-  if (authForm) {
-    authForm.addEventListener('submit', function (event) {
-      event.preventDefault();
-      handleAuthSubmit();
-    });
-  }
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
@@ -115,7 +109,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   var logoutBtn = document.getElementById('btn-logout');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async function () {
-      if (supabase) await supabase.auth.signOut();
+      if (supabaseClient) await supabaseClient.auth.signOut();
       else location.reload();
     });
   }
@@ -127,7 +121,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   try {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
   } catch (err) {
@@ -137,7 +131,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     return;
   }
 
-  supabase.auth.onAuthStateChange(function (event, session) {
+  supabaseClient.auth.onAuthStateChange(function (event, session) {
     if (session && session.user) {
       currentUser = session.user;
       showApp();
@@ -150,7 +144,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   });
 
   try {
-    var sessionResult = await supabase.auth.getSession();
+    var sessionResult = await supabaseClient.auth.getSession();
     if (sessionResult.data && sessionResult.data.session && sessionResult.data.session.user) {
       currentUser = sessionResult.data.session.user;
       showApp();
@@ -243,12 +237,12 @@ function toast(msg) {
 }
 
 async function loadPresets() {
-  if (!supabase || (currentUser && currentUser.id === 'local')) {
+  if (!supabaseClient || (currentUser && currentUser.id === 'local')) {
     presets = JSON.parse(localStorage.getItem('ps_presets') || '[]');
     renderPresets();
     return;
   }
-  var res = await supabase.from('presets').select('*').eq('user_id', currentUser.id).order('sort_order', { ascending: true });
+  var res = await supabaseClient.from('presets').select('*').eq('user_id', currentUser.id).order('sort_order', { ascending: true });
   if (res.error) { toast(res.error.message); return; }
   presets = res.data || [];
   renderPresets();
@@ -317,10 +311,10 @@ async function savePreset(e) {
   }
 
   if (id) {
-    var u = await supabase.from('presets').update({ label: label, type: type, value: value }).eq('id', id);
+    var u = await supabaseClient.from('presets').update({ label: label, type: type, value: value }).eq('id', id);
     if (u.error) { toast(u.error.message); return; }
   } else {
-    var ins = await supabase.from('presets').insert({ user_id: currentUser.id, label: label, type: type, value: value, sort_order: presets.length });
+    var ins = await supabaseClient.from('presets').insert({ user_id: currentUser.id, label: label, type: type, value: value, sort_order: presets.length });
     if (ins.error) { toast(ins.error.message); return; }
   }
   closePresetModal();
@@ -337,7 +331,7 @@ async function deletePreset(preset, idx) {
     toast('Deleted');
     return;
   }
-  var d = await supabase.from('presets').delete().eq('id', preset.id);
+  var d = await supabaseClient.from('presets').delete().eq('id', preset.id);
   if (d.error) { toast(d.error.message); return; }
   await loadPresets();
   toast('Deleted');
@@ -399,7 +393,7 @@ async function saveSplit() {
     return;
   }
 
-  var res = await supabase.from('paychecks').insert(Object.assign({ user_id: currentUser.id }, record));
+  var res = await supabaseClient.from('paychecks').insert(Object.assign({ user_id: currentUser.id }, record));
   if (res.error) { toast(res.error.message); return; }
   toast('Saved to history');
 }
@@ -408,8 +402,8 @@ async function loadHistory() {
   var history = [];
   if (currentUser && currentUser.id === 'local') {
     history = JSON.parse(localStorage.getItem('ps_history') || '[]');
-  } else if (supabase) {
-    var res = await supabase.from('paychecks').select('*').eq('user_id', currentUser.id).order('paycheck_date', { ascending: false });
+  } else if (supabaseClient) {
+    var res = await supabaseClient.from('paychecks').select('*').eq('user_id', currentUser.id).order('paycheck_date', { ascending: false });
     if (res.error) { toast(res.error.message); return; }
     history = res.data || [];
   }
@@ -479,7 +473,7 @@ async function deletePaycheck(id) {
     toast('Deleted');
     return;
   }
-  var res = await supabase.from('paychecks').delete().eq('id', id);
+  var res = await supabaseClient.from('paychecks').delete().eq('id', id);
   if (res.error) { toast(res.error.message); return; }
   await loadHistory();
   toast('Deleted');
